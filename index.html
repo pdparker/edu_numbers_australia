@@ -87,6 +87,7 @@
     height: 200px; color: #a0aec0; font-size: 0.9rem; font-style: italic;
   }
 </style>
+<script src="https://pdparker.github.io/dashboard-commons/commons.js" data-dash="edu-numbers"></script>
 </head>
 <body>
 
@@ -104,6 +105,7 @@
     <option value="ALL">All Institutions (Sector Total)</option>
   <option value="Adelaide University">Adelaide University</option><option value="Australian Catholic University">Australian Catholic University</option><option value="Avondale University">Avondale University</option><option value="Batchelor Institute of Indigenous Tertiary Education">Batchelor Institute of Indigenous Tertiary Education</option><option value="Bond University">Bond University</option><option value="Central Queensland University">Central Queensland University</option><option value="Charles Darwin University">Charles Darwin University</option><option value="Charles Sturt University">Charles Sturt University</option><option value="Curtin University">Curtin University</option><option value="Deakin University">Deakin University</option><option value="Edith Cowan University">Edith Cowan University</option><option value="Federation University Australia">Federation University Australia</option><option value="Flinders University">Flinders University</option><option value="Griffith University">Griffith University</option><option value="James Cook University">James Cook University</option><option value="La Trobe University">La Trobe University</option><option value="Macquarie University">Macquarie University</option><option value="Monash University">Monash University</option><option value="Murdoch University">Murdoch University</option><option value="Queensland University of Technology">Queensland University of Technology</option><option value="Royal Melbourne Institute of Technology">Royal Melbourne Institute of Technology</option><option value="Southern Cross University">Southern Cross University</option><option value="Swinburne University of Technology">Swinburne University of Technology</option><option value="The Australian National University">The Australian National University</option><option value="The University of Adelaide">The University of Adelaide</option><option value="The University of Melbourne">The University of Melbourne</option><option value="The University of Notre Dame Australia">The University of Notre Dame Australia</option><option value="The University of Queensland">The University of Queensland</option><option value="The University of Sydney">The University of Sydney</option><option value="The University of Western Australia">The University of Western Australia</option><option value="Torrens University Australia">Torrens University Australia</option><option value="University of Canberra">University of Canberra</option><option value="University of Divinity">University of Divinity</option><option value="University of New England">University of New England</option><option value="University of New South Wales">University of New South Wales</option><option value="University of Newcastle">University of Newcastle</option><option value="University of South Australia">University of South Australia</option><option value="University of Southern Queensland">University of Southern Queensland</option><option value="University of Tasmania">University of Tasmania</option><option value="University of Technology Sydney">University of Technology Sydney</option><option value="University of Wollongong">University of Wollongong</option><option value="University of the Sunshine Coast">University of the Sunshine Coast</option><option value="Victoria University">Victoria University</option><option value="Western Sydney University">Western Sydney University</option></select>
   <span class="note" id="dataNote">Showing data for: Central Queensland University</span>
+  <button id="csvExportBtn" onclick="exportCsv()" style="margin-left:auto;padding:6px 14px;border:1.5px solid #cbd5e0;border-radius:7px;font-size:0.8rem;background:#fff;cursor:pointer;color:#1a1a2e;">⬇ Export CSV</button>
 </div>
 
 <div class="dashboard">
@@ -324,6 +326,95 @@ function baseLayout(xTitle, yTitle, opts={}) {
 function noData(id) {
   const el = document.getElementById(id);
   el.innerHTML = '<div class="no-data">No data available for this institution</div>';
+}
+
+// ---- CSV EXPORT ----
+function exportCsv() {
+  const inst = document.getElementById('instSelect').value;
+  const rows = [['institution', 'metric', 'year', 'value']];
+  const push = (metric, year, value) => {
+    if (value !== null && value !== undefined && !isNaN(value)) rows.push([inst, metric, year, value]);
+  };
+
+  if (inst === 'ALL') {
+    const agg = ['teaching_only', 'research_only', 'teaching_research', 'other', 'total']
+      .reduce((acc, k) => { acc[k] = DATA.staff.reduce((s, d) => s + d[k], 0); return acc; }, {});
+    push('Staff FTE - Teaching Only', 2024, agg.teaching_only);
+    push('Staff FTE - Research Only', 2024, agg.research_only);
+    push('Staff FTE - Teaching & Research', 2024, agg.teaching_research);
+    push('Staff FTE - Other', 2024, agg.other);
+    push('Staff FTE - Total', 2024, agg.total);
+    const totalHdr = DATA.students.reduce((s, d) => s + d.postgrad_research, 0);
+    const totalSt = DATA.students.reduce((s, d) => s + d.total, 0);
+    push('HDR Students (EFTSL)', 2024, Math.round(totalHdr));
+    push('Total Students (EFTSL)', 2024, Math.round(totalSt));
+    push('HDR % of Total', 2024, +(totalHdr / totalSt * 100).toFixed(2));
+  } else {
+    const staffRow = DATA.staff.find(d => d.institution === inst);
+    if (staffRow) {
+      push('Staff FTE - Teaching Only', 2024, staffRow.teaching_only);
+      push('Staff FTE - Research Only', 2024, staffRow.research_only);
+      push('Staff FTE - Teaching & Research', 2024, staffRow.teaching_research);
+      push('Staff FTE - Other', 2024, staffRow.other);
+      push('Staff FTE - Total', 2024, staffRow.total);
+    }
+    const stuRow = DATA.students.find(d => d.institution === inst);
+    if (stuRow) {
+      push('HDR Students (EFTSL)', 2024, stuRow.postgrad_research);
+      push('Total Students (EFTSL)', 2024, stuRow.total);
+      const hdrPct = stuRow.hdr_pct !== undefined ? stuRow.hdr_pct : +(stuRow.postgrad_research / stuRow.total * 100).toFixed(2);
+      push('HDR % of Total', 2024, hdrPct);
+    }
+  }
+
+  const seriesMap = [
+    ['research_income', 'Research Income ($M)'],
+    ['herd', "HERD Expenditure ($'000)"],
+    ['hdr_completions', 'HDR Completions'],
+    ['block_grants', 'Research Block Grant ($M)'],
+    ['rd_ratio', 'R&D Expenditure per $1 Income (ratio)']
+  ];
+  seriesMap.forEach(([key, label]) => {
+    if (inst === 'ALL') {
+      const agg = {};
+      Object.values(DATA[key]).forEach(row => {
+        row.years.forEach((y, i) => { agg[y] = (agg[y] || 0) + (row.values[i] || 0); });
+      });
+      Object.keys(agg).map(Number).sort((a, b) => a - b).forEach(y => push(label, y, +agg[y].toFixed(4)));
+    } else {
+      const d = DATA[key][inst];
+      if (d) d.years.forEach((y, i) => push(label, y, d.values[i]));
+    }
+  });
+
+  if (inst !== 'ALL') {
+    const catData = DATA.income_by_cat[inst];
+    if (catData) {
+      Object.keys(catData).sort().forEach(year => {
+        const y = catData[year];
+        push('Research Income Cat 1 - Competitive (%)', year, y.cat1);
+        push('Research Income Cat 2 - Public Sector (%)', year, y.cat2);
+        push('Research Income Cat 3 - Industry (%)', year, y.cat3);
+        push('Research Income Cat 4 - CRC (%)', year, y.cat4);
+        push('Research Income Total ($M)', year, y.total_m);
+      });
+    }
+  }
+
+  const csv = rows.map(r => r.map(v => {
+    const s = String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'edu-numbers-' + inst.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function updateAll() {
@@ -817,8 +908,30 @@ function renderIncomeCat(inst) {
   }
 }
 
-// Initial render
-updateAll();
+// Initial render — resolve ACU default / ?inst= URL state first (dashboard-commons)
+if (typeof DashCommons !== 'undefined') {
+  DashCommons.registry().then(function (reg) {
+    var urlId = DashCommons.state.get('inst', 'australian-catholic-university');
+    if (urlId === 'ALL') {
+      sel.value = 'ALL';
+    } else {
+      var inst = reg.byId[urlId];
+      var opt = inst && [...sel.options].find(function (o) { return o.value === inst.name; });
+      if (opt) sel.value = inst.name;
+    }
+    updateAll();
+  }).catch(function () { updateAll(); });
+
+  sel.addEventListener('change', function () {
+    if (sel.value === 'ALL') { DashCommons.state.set('inst', 'ALL'); return; }
+    DashCommons.registry().then(function (reg) {
+      var match = reg.institutions.find(function (i) { return i.name === sel.value; });
+      DashCommons.state.set('inst', match ? match.id : null);
+    }).catch(function () {});
+  });
+} else {
+  updateAll();
+}
 </script><svg id="js-plotly-tester" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="position: absolute; left: -10000px; top: -10000px; width: 9000px; height: 9000px; z-index: 1;"><path class="js-reference-point" d="M0,0H1V1H0Z" style="stroke-width: 0; fill: black;"></path></svg>
 
 </body></html>
