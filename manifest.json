@@ -1,0 +1,19 @@
+{
+  "id": "edu-numbers",
+  "title": "Edu Numbers Australia",
+  "url": "https://pdparker.github.io/edu_numbers_australia/",
+  "repo": "pdparker/edu_numbers_australia",
+  "lastBuild": "2026-07-19",
+  "dataSources": [
+    {
+      "name": "Dept of Education Higher Education Statistics",
+      "vintage": "to 2024",
+      "refreshed": "2026-03-01"
+    },
+    {
+      "name": "HERD (ABS biennial survey)",
+      "vintage": "1992-2022"
+    }
+  ],
+  "notes": "HERD is biennial; research income data lag ~18 months."
+}
